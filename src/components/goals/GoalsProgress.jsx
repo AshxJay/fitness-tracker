@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { goalsService } from '../../services/goalsService';
 import {
   Box,
   Grid,
@@ -28,18 +29,29 @@ import {
 import { toast } from 'react-toastify';
 
 const goalTypes = [
-  'Weight Loss',
-  'Muscle Gain',
-  'Strength',
-  'Endurance',
-  'Flexibility',
-  'Running Distance',
-  'Steps',
-  'Nutrition',
+  'Weight Goal',
+  'Muscle Mass Goal'
 ];
+
+const measurementUnits = {
+  'Weight Goal': 'kg',
+  'Muscle Mass Goal': '%'
+};
 
 export default function GoalsProgress() {
   const [goals, setGoals] = useState([]);
+
+  useEffect(() => {
+    const fetchGoals = async () => {
+      try {
+        const data = await goalsService.getGoals();
+        setGoals(data);
+      } catch (error) {
+        toast.error('Failed to fetch goals');
+      }
+    };
+    fetchGoals();
+  }, []);
   const [openDialog, setOpenDialog] = useState(false);
   const [newGoal, setNewGoal] = useState({
     type: '',
@@ -49,47 +61,60 @@ export default function GoalsProgress() {
     notes: '',
   });
 
-  const handleAddGoal = () => {
+  const handleAddGoal = async () => {
     if (!newGoal.type || !newGoal.target || !newGoal.deadline) {
       toast.error('Please fill in all required fields');
       return;
     }
 
-    setGoals([
-      ...goals,
-      {
+    try {
+      const goalData = {
         ...newGoal,
-        id: Date.now(),
         progress: 0,
         createdAt: new Date().toISOString(),
-      },
-    ]);
-    setNewGoal({
-      type: '',
-      target: '',
-      current: '',
-      deadline: '',
-      notes: '',
-    });
-    setOpenDialog(false);
-    toast.success('Goal added successfully!');
+      };
+
+      const savedGoal = await goalsService.createGoal(goalData);
+      setGoals([...goals, savedGoal]);
+      setNewGoal({
+        type: '',
+        target: '',
+        current: '',
+        deadline: '',
+        notes: '',
+      });
+      setOpenDialog(false);
+      toast.success('Goal added successfully!');
+    } catch (error) {
+      toast.error('Failed to add goal');
+    }
   };
 
-  const handleDeleteGoal = (id) => {
-    setGoals(goals.filter((goal) => goal.id !== id));
-    toast.success('Goal deleted successfully!');
+  const handleDeleteGoal = async (id) => {
+    try {
+      await goalsService.deleteGoal(id);
+      setGoals(goals.filter((goal) => goal._id !== id));
+      toast.success('Goal deleted successfully!');
+    } catch (error) {
+      toast.error('Failed to delete goal');
+    }
   };
 
-  const handleUpdateProgress = (id, value) => {
-    setGoals(
-      goals.map((goal) => {
-        if (goal.id === id) {
-          const progress = Math.min(Math.max((value / goal.target) * 100, 0), 100);
-          return { ...goal, current: value, progress };
-        }
-        return goal;
-      })
-    );
+  const handleUpdateProgress = async (id, value) => {
+    try {
+      const goal = goals.find(g => g._id === id);
+      if (!goal) return;
+
+      const progress = Math.min(Math.max((value / goal.target) * 100, 0), 100);
+      const updatedGoal = { ...goal, current: value, progress };
+      
+      await goalsService.updateGoal(id, updatedGoal);
+      setGoals(
+        goals.map((g) => g._id === id ? updatedGoal : g)
+      );
+    } catch (error) {
+      toast.error('Failed to update progress');
+    }
   };
 
   return (
@@ -160,7 +185,7 @@ export default function GoalsProgress() {
                         Progress
                       </Typography>
                       <Typography variant="body2">
-                        {goal.current || 0} / {goal.target}
+                        {goal.current || 0} / {goal.target} {measurementUnits[goal.type]}
                       </Typography>
                     </Box>
                     <LinearProgress
@@ -222,20 +247,32 @@ export default function GoalsProgress() {
 
           <TextField
             fullWidth
-            label="Target Value"
+            label={`Target Value (${newGoal.type ? measurementUnits[newGoal.type] : ''})`}
             type="number"
             value={newGoal.target}
             onChange={(e) => setNewGoal({ ...newGoal, target: e.target.value })}
             sx={{ mt: 2 }}
+            InputProps={{
+              inputProps: { 
+                step: newGoal.type === 'Weight Goal' ? '0.1' : '1',
+                min: 0
+              }
+            }}
           />
 
           <TextField
             fullWidth
-            label="Current Value"
+            label={`Current Value (${newGoal.type ? measurementUnits[newGoal.type] : ''})`}
             type="number"
             value={newGoal.current}
             onChange={(e) => setNewGoal({ ...newGoal, current: e.target.value })}
             sx={{ mt: 2 }}
+            InputProps={{
+              inputProps: { 
+                step: newGoal.type === 'Weight Goal' ? '0.1' : '1',
+                min: 0
+              }
+            }}
           />
 
           <TextField

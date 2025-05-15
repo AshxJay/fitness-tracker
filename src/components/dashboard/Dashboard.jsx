@@ -33,6 +33,7 @@ import {
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import useStore from '../../store/useStore';
+import useMealStore from '../../store/mealStore';
 
 // Register ChartJS components
 ChartJS.register(
@@ -59,19 +60,45 @@ export default function Dashboard() {
     interval: null,
   });
 
-  // Sample data for the charts with dynamic generation
+  const { meals, getMealsForRange } = useMealStore();
+
   const generateWeeklyData = () => {
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const today = new Date().getDay() - 1; // 0 = Monday
+    const today = new Date();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Monday
     
+    // Calculate daily calories from meals
+    const dailyCalories = meals.reduce((acc, meal) => {
+      const mealDate = new Date(meal.date);
+      const dateStr = mealDate.toISOString().split('T')[0];
+      if (!acc[dateStr]) {
+        acc[dateStr] = {
+          calories: 0,
+          protein: 0,
+          carbs: 0,
+          fat: 0
+        };
+      }
+      acc[dateStr].calories += meal.calories || 0;
+      acc[dateStr].protein += meal.protein || 0;
+      acc[dateStr].carbs += meal.carbs || 0;
+      acc[dateStr].fat += meal.fat || 0;
+      return acc;
+    }, {});
+
+    const calorieGoal = user?.profile?.goals?.calorieGoal || 2000;
+
     return {
       labels: days,
       datasets: [
         {
-          label: 'Calories Burned',
+          label: 'Calories Consumed',
           data: days.map((_, index) => {
-            if (index > today) return null;
-            return Math.floor(Math.random() * (500 - 300 + 1) + 300);
+            const date = new Date(startOfWeek);
+            date.setDate(startOfWeek.getDate() + index);
+            const dateStr = date.toISOString().split('T')[0];
+            return dailyCalories[dateStr]?.calories || 0;
           }),
           borderColor: '#FF4B2B',
           backgroundColor: 'rgba(255, 75, 43, 0.1)',
@@ -86,7 +113,7 @@ export default function Dashboard() {
         },
         {
           label: 'Target Calories',
-          data: Array(7).fill(400),
+          data: Array(7).fill(calorieGoal),
           borderColor: '#2ecc71',
           borderDash: [5, 5],
           tension: 0.4,
@@ -99,46 +126,106 @@ export default function Dashboard() {
   };
 
   const [caloriesData, setCaloriesData] = useState(generateWeeklyData());
+  // Calculate daily stats from meals
+  const calculateDailyStats = () => {
+    const todayMeals = meals.filter(meal => {
+      const mealDate = new Date(meal.date);
+      const today = new Date();
+      return mealDate.toISOString().split('T')[0] === today.toISOString().split('T')[0];
+    });
+
+    const totalCalories = todayMeals.reduce((sum, meal) => sum + meal.calories, 0);
+    const totalProtein = todayMeals.reduce((sum, meal) => sum + (meal.protein || 0), 0);
+    const totalCarbs = todayMeals.reduce((sum, meal) => sum + (meal.carbs || 0), 0);
+    const totalFats = todayMeals.reduce((sum, meal) => sum + (meal.fat || 0), 0);
+
+    return {
+      calories: {
+        current: totalCalories,
+        target: user?.profile?.goals?.calorieGoal || 2000,
+      },
+      macros: {
+        protein: totalProtein,
+        carbs: totalCarbs,
+        fats: totalFats,
+      },
+      water: {
+        current: 2.5,
+        target: 3.0,
+      },
+    };
+  };
+
   const [dailyStats, setDailyStats] = useState({
     calories: {
-      current: 1800,
-      target: 2000,
+      current: 0,
+      target: user?.profile?.goals?.calorieGoal || 2000,
     },
     macros: {
-      protein: 150,
-      carbs: 200,
-      fats: 65,
+      protein: 0,
+      carbs: 0,
+      fats: 0,
     },
     water: {
-      current: 2.5,
-      target: 3.0,
+      current: 0,
+      target: user?.profile?.goals?.waterIntake || 3.0,
     },
   });
 
   useEffect(() => {
+    if (meals.length > 0) {
+      const stats = calculateDailyStats();
+      setDailyStats(stats);
+      setCaloriesData(generateWeeklyData());
+    }
+  }, [meals, user?.profile]);
+
+  useEffect(() => {
+    // Fetch meals for the current week and update stats
+    const today = new Date();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Monday
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
+
+    getMealsForRange(startOfWeek, endOfWeek);
+
     // Update chart data periodically
     const interval = setInterval(() => {
-      setCaloriesData(generateWeeklyData());
+      getMealsForRange(startOfWeek, endOfWeek);
     }, 60000); // Update every minute
 
     return () => clearInterval(interval);
-  }, []);
+  }, [getMealsForRange]);
 
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    scales: {
+      y: {
+        beginAtZero: true,
+        grid: {
+          color: 'rgba(255, 255, 255, 0.1)',
+        },
+        ticks: {
+          callback: (value) => `${value} cal`,
+        },
+      },
+      x: {
+        grid: {
+          color: 'rgba(255, 255, 255, 0.1)',
+        },
+      },
+    },
     plugins: {
       legend: {
         position: 'top',
-        labels: {
-          color: '#fff',
-          font: {
-            size: 12,
-            weight: 'bold',
-          },
-          usePointStyle: true,
-          pointStyle: 'circle',
-        },
+      },
+      title: {
+        display: false,
       },
       tooltip: {
         mode: 'index',
@@ -149,6 +236,13 @@ export default function Dashboard() {
         borderColor: 'rgba(255, 255, 255, 0.1)',
         borderWidth: 1,
         padding: 12,
+        callbacks: {
+          label: (context) => {
+            const label = context.dataset.label || '';
+            const value = context.parsed.y;
+            return `${label}: ${value} calories`;
+          },
+        },
         bodyFont: {
           size: 12,
         },

@@ -1,129 +1,161 @@
 import React, { useState } from 'react';
+import { toast } from 'react-toastify';
+import { goalsService } from '../../services/goalsService';
+import useStore from '../../store/useStore';
 import './Goals.css';
 
 const GoalSetting = () => {
-  const [weeklyGoal, setWeeklyGoal] = useState({
-    startDate: '',
-    weightGoal: '',
-    workoutFrequency: '',
-    calorieTarget: '',
-    specificGoals: [{ id: 1, description: '', completed: false }],
+  const addGoal = useStore((state) => state.addGoal);
+  const [goal, setGoal] = useState({
+    type: 'weight',
+    name: '',
+    description: '',
+    targetValue: '',
+    currentValue: '',
+    unit: 'kg',
+    startDate: new Date().toISOString().split('T')[0],
+    targetDate: '',
+    status: 'in-progress'
   });
 
-  const addSpecificGoal = () => {
-    setWeeklyGoal(prev => ({
-      ...prev,
-      specificGoals: [
-        ...prev.specificGoals,
-        { 
-          id: prev.specificGoals.length + 1, 
-          description: '', 
-          completed: false 
-        }
-      ]
-    }));
+  const goalTypes = [
+    { value: 'weight', label: 'Weight Goal', unit: 'kg' },
+    { value: 'strength', label: 'Strength Goal', unit: 'kg' },
+    { value: 'endurance', label: 'Endurance Goal', unit: 'minutes' },
+    { value: 'nutrition', label: 'Nutrition Goal', unit: 'calories' }
+  ];
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setGoal(prev => {
+      const newGoal = { ...prev, [name]: value };
+      if (name === 'type') {
+        const selectedType = goalTypes.find(type => type.value === value);
+        newGoal.unit = selectedType.unit;
+      }
+      return newGoal;
+    });
   };
 
-  const updateSpecificGoal = (id, description) => {
-    setWeeklyGoal(prev => ({
-      ...prev,
-      specificGoals: prev.specificGoals.map(goal =>
-        goal.id === id ? { ...goal, description } : goal
-      )
-    }));
-  };
-
-  const removeSpecificGoal = (id) => {
-    setWeeklyGoal(prev => ({
-      ...prev,
-      specificGoals: prev.specificGoals.filter(goal => goal.id !== id)
-    }));
-  };
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // TODO: Save weekly goals
-    console.log('Weekly goals:', weeklyGoal);
+    try {
+      // Convert string values to numbers
+      const goalData = {
+        ...goal,
+        targetValue: Number(goal.targetValue),
+        currentValue: Number(goal.currentValue)
+      };
+      
+      const savedGoal = await goalsService.createGoal(goalData);
+      addGoal(savedGoal);
+      toast.success('Goal saved successfully!');
+      // Reset form
+      setGoal({
+        type: 'weight',
+        name: '',
+        description: '',
+        targetValue: '',
+        currentValue: '',
+        unit: 'kg',
+        startDate: new Date().toISOString().split('T')[0],
+        targetDate: '',
+        status: 'in-progress'
+      });
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error saving goal');
+    }
   };
 
   return (
     <div className="goals-container">
-      <h2>Set Weekly Goals</h2>
-      <form onSubmit={handleSubmit} className="goals-form">
+      <h2>Set New Goal</h2>
+      <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label>Week Starting</label>
+          <label>Goal Type:</label>
+          <select
+            name="type"
+            value={goal.type}
+            onChange={handleChange}
+            required
+          >
+            {goalTypes.map(type => (
+              <option key={type.value} value={type.value}>
+                {type.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label>Goal Name:</label>
           <input
-            type="date"
-            value={weeklyGoal.startDate}
-            onChange={(e) => setWeeklyGoal({ ...weeklyGoal, startDate: e.target.value })}
+            type="text"
+            name="name"
+            value={goal.name}
+            onChange={handleChange}
+            placeholder="Enter goal name"
             required
           />
         </div>
 
-        <div className="form-row">
-          <div className="form-group">
-            <label>Weight Goal (kg)</label>
-            <input
-              type="number"
-              step="0.1"
-              value={weeklyGoal.weightGoal}
-              onChange={(e) => setWeeklyGoal({ ...weeklyGoal, weightGoal: e.target.value })}
-              placeholder="Target weight for the week"
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Workout Sessions</label>
-            <input
-              type="number"
-              min="1"
-              max="7"
-              value={weeklyGoal.workoutFrequency}
-              onChange={(e) => setWeeklyGoal({ ...weeklyGoal, workoutFrequency: e.target.value })}
-              placeholder="Number of workouts this week"
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Daily Calorie Target</label>
-            <input
-              type="number"
-              value={weeklyGoal.calorieTarget}
-              onChange={(e) => setWeeklyGoal({ ...weeklyGoal, calorieTarget: e.target.value })}
-              placeholder="Daily calorie target"
-            />
-          </div>
+        <div className="form-group">
+          <label>Description:</label>
+          <textarea
+            name="description"
+            value={goal.description}
+            onChange={handleChange}
+            placeholder="Enter goal description"
+          />
         </div>
 
-        <div className="specific-goals-section">
-          <h3>Specific Goals for the Week</h3>
-          {weeklyGoal.specificGoals.map((goal) => (
-            <div key={goal.id} className="specific-goal-item">
-              <input
-                type="text"
-                value={goal.description}
-                onChange={(e) => updateSpecificGoal(goal.id, e.target.value)}
-                placeholder="Enter a specific goal (e.g., Run 5km, Do 20 pushups)"
-              />
-              <button
-                type="button"
-                className="remove-goal-btn"
-                onClick={() => removeSpecificGoal(goal.id)}
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-          <button
-            type="button"
-            className="add-goal-btn"
-            onClick={addSpecificGoal}
-          >
-            + Add Another Goal
-          </button>
+        <div className="form-group">
+          <label>Current Value ({goal.unit}):</label>
+          <input
+            type="number"
+            name="currentValue"
+            value={goal.currentValue}
+            onChange={handleChange}
+            placeholder={`Enter current value in ${goal.unit}`}
+            required
+          />
         </div>
 
-        <button type="submit" className="save-goals-btn">Save Weekly Goals</button>
+        <div className="form-group">
+          <label>Target Value ({goal.unit}):</label>
+          <input
+            type="number"
+            name="targetValue"
+            value={goal.targetValue}
+            onChange={handleChange}
+            placeholder={`Enter target value in ${goal.unit}`}
+            required
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Start Date:</label>
+          <input
+            type="date"
+            name="startDate"
+            value={goal.startDate}
+            onChange={handleChange}
+            required
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Target Date:</label>
+          <input
+            type="date"
+            name="targetDate"
+            value={goal.targetDate}
+            onChange={handleChange}
+            required
+          />
+        </div>
+
+        <button type="submit" className="save-goals-btn">Save Goal</button>
       </form>
     </div>
   );

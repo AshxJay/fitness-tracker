@@ -14,16 +14,17 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  Grid,
 } from '@mui/material';
 import { Visibility, VisibilityOff, FitnessCenter } from '@mui/icons-material';
 import { Link as RouterLink } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import useStore from '../../store/useStore';
+import useAuthStore from '../../store/authStore';
 
-export default function SignUp() {
+export default function Signup() {
+  console.log('Rendering Signup component');
   const navigate = useNavigate();
-  const setUser = useStore((state) => state.setUser);
-  const setIsAuthenticated = useStore((state) => state.setIsAuthenticated);
+  const { signup, isLoading, error, clearError } = useAuthStore();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -45,12 +46,25 @@ export default function SignUp() {
     { value: 'extra', label: 'Extra active (very hard exercise & physical job)' },
   ];
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword ||
-        !formData.height || !formData.weight || !formData.activityLevel) {
+        !formData.height || !formData.weight || !formData.age || !formData.gender || !formData.activityLevel) {
       toast.error('Please fill in all fields');
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+
+    // Validate password strength
+    if (formData.password.length < 8) {
+      toast.error('Password must be at least 8 characters long');
       return;
     }
 
@@ -77,9 +91,20 @@ export default function SignUp() {
     const bmr = calculateBMR(parseFloat(formData.weight), parseFloat(formData.height), parseFloat(formData.age), formData.gender);
     const tdee = Math.round(bmr * activityMultipliers[formData.activityLevel]);
 
+    // Validate and log form data
+    console.log('Form data before processing:', formData);
+    
+    // Validate password again just before sending
+    if (!formData.password) {
+      toast.error('Password is required');
+      return;
+    }
+
+    // Create user object with all required fields
     const user = {
       name: formData.name,
       email: formData.email,
+      password: formData.password,  // IMPORTANT: Send the password
       profile: {
         height: parseFloat(formData.height),
         weight: parseFloat(formData.weight),
@@ -99,12 +124,32 @@ export default function SignUp() {
       }
     };
     
-    setUser(user);
-    setIsAuthenticated(true);
-    toast.success('Account created successfully!');
-    navigate('/dashboard', { replace: true });
+    // Log the final user object being sent
+    console.log('Form validation passed, attempting signup...', {
+      ...user,
+      password: '[REDACTED]'
+    });
+    
+    try {
+      const success = await signup(user);
+      console.log('Signup API response:', success);
+
+      if (success) {
+        console.log('Signup successful, navigating to dashboard...');
+        toast.success('Account created successfully!');
+        navigate('/dashboard', { replace: true });
+      } else {
+        const errorMessage = error || 'Failed to create account';
+        console.error('Signup failed:', errorMessage);
+        toast.error(errorMessage);
+      }
+    } catch (err) {
+      console.error('Unexpected error during signup:', err);
+      toast.error(err.message || 'An unexpected error occurred');
+    }
   };
 
+  console.log('About to render Signup form');
   return (
     <Box
       sx={{
@@ -118,11 +163,14 @@ export default function SignUp() {
       }}
     >
       <Card
+        component="form"
+        onSubmit={handleSubmit}
         sx={{
           maxWidth: 400,
           width: '100%',
           position: 'relative',
-          background: 'rgba(26, 26, 26, 0.8)',
+          background: '#1A1A1A !important',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
           backdropFilter: 'blur(10px)',
           border: '1px solid rgba(255, 255, 255, 0.1)',
           boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
@@ -151,7 +199,7 @@ export default function SignUp() {
             </Typography>
           </Box>
 
-          <form onSubmit={handleSubmit}>
+          <Box>
             <TextField
               fullWidth
               label="Name"
@@ -474,6 +522,7 @@ export default function SignUp() {
               fullWidth
               type="submit"
               variant="contained"
+              disabled={isLoading}
               sx={{
                 py: 1.5,
                 background: 'linear-gradient(45deg, #FF4B2B, #FF416C)',
@@ -485,9 +534,9 @@ export default function SignUp() {
                 boxShadow: '0 4px 20px rgba(255, 75, 43, 0.25)',
               }}
             >
-              Create Account
+              {isLoading ? 'Creating Account...' : 'Create Account'}
             </Button>
-          </form>
+          </Box>
 
           <Typography align="center" sx={{ mt: 3, color: 'rgba(255, 255, 255, 0.7)' }}>
             Already have an account?{' '}

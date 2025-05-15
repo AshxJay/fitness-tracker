@@ -1,37 +1,11 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import useStore from '../../store/useStore';
+import { nutritionService } from '../../services/nutritionService';
 import {
-  Box,
-  Grid,
-  Card,
-  CardContent,
-  Typography,
-  Button,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  IconButton,
-  LinearProgress,
-  Divider,
-  Avatar,
-  Tab,
-  Tabs,
-  Tooltip,
-  CircularProgress,
+  Box, Grid, Card, CardContent, Typography, Button, TextField, FormControl,
+  InputLabel, Select, MenuItem, IconButton, LinearProgress, Divider, Tabs, Tab
 } from '@mui/material';
-import {
-  Add as AddIcon,
-  Delete as DeleteIcon,
-  Restaurant,
-  LocalDining,
-  TrendingUp,
-  AccessTime,
-  Info as InfoIcon,
-  CalendarToday,
-  FilterList,
-} from '@mui/icons-material';
+import { Delete as DeleteIcon } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 
 const mealTypes = [
@@ -48,48 +22,13 @@ const getInitialNutrition = (userProfile) => ({
   fat: { current: 0, target: userProfile?.goals?.fat || 70 },
 });
 
-const updateNutrition = (meal, action) => {
-  const multiplier = action === 'add' ? 1 : -1;
-  setNutrition((prev) => ({
-    calories: {
-      ...prev.calories,
-      current: prev.calories.current + multiplier * Number(meal.calories),
-    },
-    protein: {
-      ...prev.protein,
-      current: prev.protein.current + multiplier * Number(meal.protein || 0),
-    },
-    carbs: {
-      ...prev.carbs,
-      current: prev.carbs.current + multiplier * Number(meal.carbs || 0),
-    },
-    fat: {
-      ...prev.fat,
-      current: prev.fat.current + multiplier * Number(meal.fat || 0),
-    },
-  }));
-};
-
-const handleDeleteMeal = (meal) => {
-  setMeals(meals.filter((m) => m.id !== meal.id));
-  updateNutrition(meal, 'remove');
-  toast.success('Meal deleted successfully!');
-};
-
 export default function NutritionLog() {
   const user = useStore((state) => state.user);
   const [meals, setMeals] = useState([]);
-  const [openDialog, setOpenDialog] = useState(false);
   const [nutrition, setNutrition] = useState(getInitialNutrition(user?.profile));
-
-  useEffect(() => {
-    if (user?.profile) {
-      setNutrition(getInitialNutrition(user.profile));
-    }
-  }, [user?.profile]);
-
-  const [selectedTab, setSelectedTab] = useState(0);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedTab, setSelectedTab] = useState(0);
+
   const [newMeal, setNewMeal] = useState({
     name: '',
     type: '',
@@ -97,177 +36,234 @@ export default function NutritionLog() {
     protein: '',
     carbs: '',
     fat: '',
-    notes: '',
   });
 
-  const handleAddMeal = () => {
-    if (newMeal.name && newMeal.calories && newMeal.protein && newMeal.carbs && newMeal.fat) {
-      const newMealData = { ...newMeal, id: Date.now() };
-      setMeals((prev) => [...prev, newMealData]);
-      updateNutrition(newMealData, 'add');
-      setNewMeal({ name: '', type: '', calories: '', protein: '', carbs: '', fat: '', notes: '' });
-      toast.success('Meal added successfully!');
-    } else {
+  const updateNutrition = (meal, action) => {
+    const multiplier = action === 'add' ? 1 : -1;
+    setNutrition((prev) => ({
+      calories: {
+        ...prev.calories,
+        current: prev.calories.current + multiplier * Number(meal.calories || 0),
+      },
+      protein: {
+        ...prev.protein,
+        current: prev.protein.current + multiplier * Number(meal.protein || 0),
+      },
+      carbs: {
+        ...prev.carbs,
+        current: prev.carbs.current + multiplier * Number(meal.carbs || 0),
+      },
+      fat: {
+        ...prev.fat,
+        current: prev.fat.current + multiplier * Number(meal.fat || 0),
+      },
+    }));
+  };
+
+  const handleDeleteMeal = async (meal) => {
+    try {
+      await nutritionService.deleteNutritionLog(meal.logId);
+      setMeals((prev) => prev.filter((m) => m.logId !== meal.logId));
+      updateNutrition(meal, 'remove');
+      toast.success('Meal deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting meal:', error);
+      toast.error('Failed to delete meal');
+    }
+  };
+
+  const fetchMeals = async () => {
+    if (!user?.profile) return;
+
+    setNutrition(getInitialNutrition(user.profile));
+    try {
+      const logs = await nutritionService.getNutritionLogsByDate(selectedDate);
+      const formattedMeals = logs
+        .filter(log => {
+          const logDate = new Date(log.date).toISOString().split('T')[0];
+          return logDate === selectedDate;
+        })
+        .flatMap((log) =>
+          log.meals.map((meal) => {
+            const food = meal.foods[0];
+            return {
+              logId: log._id,
+              name: food.name,
+              type: meal.name,
+              calories: food.calories,
+              protein: food.protein,
+              carbs: food.carbs,
+              fat: food.fat,
+              date: log.date
+            };
+          })
+        );
+      setMeals(formattedMeals);
+      formattedMeals.forEach((meal) => updateNutrition(meal, 'add'));
+    } catch (error) {
+      console.error('Error loading meals:', error);
+      toast.error('Failed to load meals');
+    }
+  };
+
+  useEffect(() => {
+    fetchMeals();
+  }, [user?.profile, selectedDate]);
+
+  const handleAddMeal = async () => {
+    const { name, type, calories, protein, carbs, fat } = newMeal;
+
+    if (!name || !type || !calories || !protein || !carbs || !fat) {
       toast.error('Please fill in all fields');
+      return;
+    }
+
+    try {
+      const mealData = {
+        meals: [{
+          name: type,
+          time: new Date(),
+          foods: [{
+            name,
+            calories: Number(calories),
+            protein: Number(protein),
+            carbs: Number(carbs),
+            fat: Number(fat),
+            servingSize: 1,
+            unit: 'serving'
+          }]
+        }],
+        totalCalories: Number(calories),
+        totalProtein: Number(protein),
+        totalCarbs: Number(carbs),
+        totalFat: Number(fat)
+      };
+
+      const savedMeal = await nutritionService.addNutritionLog(mealData);
+
+      const mealObj = {
+        name,
+        type,
+        calories: Number(calories),
+        protein: Number(protein),
+        carbs: Number(carbs),
+        fat: Number(fat),
+        logId: savedMeal._id,
+      };
+
+      setMeals((prev) => [...prev, mealObj]);
+      updateNutrition(mealObj, 'add');
+      setNewMeal({ name: '', type: '', calories: '', protein: '', carbs: '', fat: '' });
+      
+      // Refresh nutrition stats immediately
+      await fetchMeals();
+      toast.success('Meal added successfully!');
+    } catch (error) {
+      console.error('Error adding meal:', error);
+      toast.error('Failed to add meal');
     }
   };
 
   return (
     <Box sx={{ p: 2 }}>
       <Grid container spacing={2}>
-        {/* Left column: Nutrition Summary */}
+        {/* Nutrition Summary */}
         <Grid item xs={12} md={6}>
           <Card sx={{ height: '100%' }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Nutrition Summary
-              </Typography>
+              <Typography variant="h6" gutterBottom>Nutrition Summary</Typography>
               <LinearProgress
                 sx={{ mb: 2 }}
                 variant="determinate"
                 value={(nutrition.calories.current / nutrition.calories.target) * 100}
               />
               <Grid container spacing={2}>
-                <Grid item xs={6}>
-                  <Typography variant="body2">Calories</Typography>
-                  <Typography variant="body1">{nutrition.calories.current} / {nutrition.calories.target}</Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="body2">Protein</Typography>
-                  <Typography variant="body1">{nutrition.protein.current} / {nutrition.protein.target}</Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="body2">Carbs</Typography>
-                  <Typography variant="body1">{nutrition.carbs.current} / {nutrition.carbs.target}</Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="body2">Fat</Typography>
-                  <Typography variant="body1">{nutrition.fat.current} / {nutrition.fat.target}</Typography>
-                </Grid>
+                <Grid item xs={6}><Typography variant="body2">Calories</Typography><Typography>{nutrition.calories.current} / {nutrition.calories.target}</Typography></Grid>
+                <Grid item xs={6}><Typography variant="body2">Protein</Typography><Typography>{nutrition.protein.current} / {nutrition.protein.target}</Typography></Grid>
+                <Grid item xs={6}><Typography variant="body2">Carbs</Typography><Typography>{nutrition.carbs.current} / {nutrition.carbs.target}</Typography></Grid>
+                <Grid item xs={6}><Typography variant="body2">Fat</Typography><Typography>{nutrition.fat.current} / {nutrition.fat.target}</Typography></Grid>
               </Grid>
             </CardContent>
           </Card>
         </Grid>
 
-        {/* Right column: Meals List and Add Meal Form */}
+        {/* Meal Log and Add Meal */}
         <Grid item xs={12} md={6}>
           <Card sx={{ height: '100%' }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Meals
-              </Typography>
-              <Tabs
-                value={selectedTab}
-                onChange={(event, newValue) => setSelectedTab(newValue)}
-                variant="scrollable"
-                scrollButtons="auto"
-                sx={{ mb: 2 }}
-              >
+              <Typography variant="h6" gutterBottom>Meals</Typography>
+              <Tabs value={selectedTab} onChange={(e, val) => setSelectedTab(val)} sx={{ mb: 2 }}>
                 <Tab label="Today" />
                 <Tab label="Yesterday" />
                 <Tab label="This Week" />
                 <Tab label="This Month" />
               </Tabs>
 
-              {/* Meal List */}
               <Box sx={{ maxHeight: '300px', overflowY: 'auto' }}>
-                <ul>
-                  {meals.map((meal) => (
-                    <li key={meal.id}>
-                      <Grid container alignItems="center" spacing={1}>
-                        <Grid item xs={6}>
-                          <Typography variant="body1">{meal.name}</Typography>
+                {meals.length === 0 ? (
+                  <Typography variant="body2">No meals logged for this day.</Typography>
+                ) : (
+                  <ul style={{ listStyle: 'none', padding: 0 }}>
+                    {meals.map((meal, index) => (
+                      <li key={meal.logId + '-' + index}>
+                        <Grid container alignItems="center" spacing={1}>
+                          <Grid item xs={6}><Typography>{meal.name}</Typography></Grid>
+                          <Grid item xs={3}><Typography variant="body2">{meal.type}</Typography></Grid>
+                          <Grid item xs={3}>
+                            <IconButton onClick={() => handleDeleteMeal(meal)} color="secondary">
+                              <DeleteIcon />
+                            </IconButton>
+                          </Grid>
                         </Grid>
-                        <Grid item xs={3}>
-                          <Typography variant="body2">{meal.type}</Typography>
-                        </Grid>
-                        <Grid item xs={3}>
-                          <IconButton onClick={() => handleDeleteMeal(meal)} color="secondary">
-                            <DeleteIcon />
-                          </IconButton>
-                        </Grid>
-                      </Grid>
-                    </li>
-                  ))}
-                </ul>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </Box>
 
               <Divider sx={{ my: 2 }} />
-
-              {/* Add Meal Form */}
-              <Typography variant="h6" gutterBottom>
-                Add Meal
-              </Typography>
-              <form>
-                <Grid container spacing={2}>
-                  <Grid item xs={12} md={6}>
-                    <TextField
-                      fullWidth
-                      label="Meal Name"
-                      value={newMeal.name}
-                      onChange={(event) => setNewMeal({ ...newMeal, name: event.target.value })}
-                    />
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <FormControl fullWidth>
-                      <InputLabel id="meal-type-label">Meal Type</InputLabel>
-                      <Select
-                        labelId="meal-type-label"
-                        value={newMeal.type}
-                        onChange={(event) => setNewMeal({ ...newMeal, type: event.target.value })}
-                      >
-                        {mealTypes.map((mealType) => (
-                          <MenuItem key={mealType.type} value={mealType.type}>
-                            {mealType.icon} {mealType.type}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField
-                      fullWidth
-                      label="Calories"
-                      value={newMeal.calories}
-                      onChange={(event) => setNewMeal({ ...newMeal, calories: event.target.value })}
-                    />
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField
-                      fullWidth
-                      label="Protein"
-                      value={newMeal.protein}
-                      onChange={(event) => setNewMeal({ ...newMeal, protein: event.target.value })}
-                    />
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField
-                      fullWidth
-                      label="Carbs"
-                      value={newMeal.carbs}
-                      onChange={(event) => setNewMeal({ ...newMeal, carbs: event.target.value })}
-                    />
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField
-                      fullWidth
-                      label="Fat"
-                      value={newMeal.fat}
-                      onChange={(event) => setNewMeal({ ...newMeal, fat: event.target.value })}
-                    />
-                  </Grid>
-                  <Grid item xs={12}>
-                    <Button
-                      fullWidth
-                      variant="contained"
-                      color="primary"
-                      onClick={handleAddMeal}
-                    >
-                      Add Meal
-                    </Button>
-                  </Grid>
+              <Typography variant="h6" gutterBottom>Add Meal</Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={6}>
+                  <TextField fullWidth label="Meal Name" value={newMeal.name}
+                    onChange={(e) => setNewMeal({ ...newMeal, name: e.target.value })} />
                 </Grid>
-              </form>
+                <Grid item xs={12} md={6}>
+                  <FormControl fullWidth>
+                    <InputLabel id="meal-type-label">Meal Type</InputLabel>
+                    <Select
+                      labelId="meal-type-label"
+                      value={newMeal.type}
+                      onChange={(e) => setNewMeal({ ...newMeal, type: e.target.value })}
+                    >
+                      {mealTypes.map((mealType) => (
+                        <MenuItem key={mealType.type} value={mealType.type}>
+                          {mealType.icon} {mealType.type}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField fullWidth label="Calories" type="number" value={newMeal.calories}
+                    onChange={(e) => setNewMeal({ ...newMeal, calories: e.target.value })} />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField fullWidth label="Protein" type="number" value={newMeal.protein}
+                    onChange={(e) => setNewMeal({ ...newMeal, protein: e.target.value })} />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField fullWidth label="Carbs" type="number" value={newMeal.carbs}
+                    onChange={(e) => setNewMeal({ ...newMeal, carbs: e.target.value })} />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField fullWidth label="Fat" type="number" value={newMeal.fat}
+                    onChange={(e) => setNewMeal({ ...newMeal, fat: e.target.value })} />
+                </Grid>
+                <Grid item xs={12}>
+                  <Button fullWidth variant="contained" onClick={handleAddMeal}>Add Meal</Button>
+                </Grid>
+              </Grid>
             </CardContent>
           </Card>
         </Grid>

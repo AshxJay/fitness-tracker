@@ -20,18 +20,18 @@ export default function AuthWrapper({ children }) {
     const publicPaths = ['/', '/login', '/signup'];
     const currentPath = location.pathname;
 
-    // Always redirect to login if not authenticated (except for public paths)
+    // Only redirect to login if not authenticated and trying to access a protected route
     if (!isAuthenticated && !publicPaths.includes(currentPath)) {
-      navigate('/', { state: { from: currentPath }, replace: true });
+      navigate('/login', { state: { from: currentPath }, replace: true });
       return;
     }
 
     // If authenticated and on a public path, go to dashboard
-    if (isAuthenticated && publicPaths.includes(currentPath)) {
+    if (isAuthenticated && publicPaths.includes(currentPath) && currentPath !== '/signup') {
       navigate('/dashboard', { replace: true });
       return;
     }
-  }, [isAuthenticated, user, navigate, location, clearStore]);
+  }, [isAuthenticated, navigate, location.pathname]);
 
   return children;
 }

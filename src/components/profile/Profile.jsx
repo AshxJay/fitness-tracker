@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -18,6 +18,7 @@ import {
 import { PhotoCamera, Save } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import useStore from '../../store/useStore';
+import { userService } from '../../services/userService';
 
 export default function Profile() {
   const user = useStore((state) => state.user);
@@ -33,6 +34,21 @@ export default function Profile() {
     fitnessGoals: user?.fitnessGoals || [],
     activityLevel: user?.activityLevel || '',
     profileImage: user?.profileImage || null,
+    goals: {
+      calorieGoal: user?.goals?.calorieGoal || 2000,
+      protein: user?.goals?.protein || 150,
+      carbs: user?.goals?.carbs || 250,
+      fat: user?.goals?.fat || 70,
+      waterIntake: user?.goals?.waterIntake || 3.0,
+      workoutDays: user?.goals?.workoutDays || 3,
+      workoutDuration: user?.goals?.workoutDuration || 45,
+    },
+    preferences: {
+      measurementSystem: user?.preferences?.measurementSystem || 'metric',
+      workoutReminders: user?.preferences?.workoutReminders || true,
+      mealReminders: user?.preferences?.mealReminders || true,
+      waterReminders: user?.preferences?.waterReminders || true,
+    }
   });
 
   const fitnessGoalsOptions = [
@@ -63,10 +79,37 @@ export default function Profile() {
     }
   };
 
-  const handleSubmit = (e) => {
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const profile = await userService.getProfile();
+        if (profile) {
+          setFormData({
+            ...formData,
+            ...profile,
+            goals: { ...formData.goals, ...profile.goals },
+            preferences: { ...formData.preferences, ...profile.preferences }
+          });
+          setUser(profile);
+        }
+      } catch (error) {
+        console.error('Error loading profile:', error);
+        toast.error('Failed to load profile');
+      }
+    };
+    loadProfile();
+  }, []);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setUser(formData);
-    toast.success('Profile updated successfully!');
+    try {
+      await userService.updateProfile(formData);
+      setUser(formData);
+      toast.success('Profile updated successfully!');
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      toast.error('Failed to update profile');
+    }
   };
 
   const handleGoalToggle = (goal) => {
@@ -209,6 +252,182 @@ export default function Profile() {
                     />
                   ))}
                 </Box>
+              </Grid>
+            </Grid>
+          </CardContent>
+        </Card>
+
+        {/* Nutrition Goals */}
+        <Card sx={{ mb: 4, bgcolor: 'background.paper' }}>
+          <CardContent>
+            <Typography variant="h6" sx={{ mb: 3 }}>Nutrition Goals</Typography>
+            <Grid container spacing={3}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Daily Calorie Goal"
+                  type="number"
+                  value={formData.goals.calorieGoal}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    goals: { ...formData.goals, calorieGoal: parseInt(e.target.value) }
+                  })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Daily Water Intake (L)"
+                  type="number"
+                  value={formData.goals.waterIntake}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    goals: { ...formData.goals, waterIntake: parseFloat(e.target.value) }
+                  })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  label="Protein Goal (g)"
+                  type="number"
+                  value={formData.goals.protein}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    goals: { ...formData.goals, protein: parseInt(e.target.value) }
+                  })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  label="Carbs Goal (g)"
+                  type="number"
+                  value={formData.goals.carbs}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    goals: { ...formData.goals, carbs: parseInt(e.target.value) }
+                  })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  label="Fat Goal (g)"
+                  type="number"
+                  value={formData.goals.fat}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    goals: { ...formData.goals, fat: parseInt(e.target.value) }
+                  })}
+                />
+              </Grid>
+            </Grid>
+          </CardContent>
+        </Card>
+
+        {/* Workout Goals */}
+        <Card sx={{ mb: 4, bgcolor: 'background.paper' }}>
+          <CardContent>
+            <Typography variant="h6" sx={{ mb: 3 }}>Workout Goals</Typography>
+            <Grid container spacing={3}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Workout Days per Week"
+                  type="number"
+                  inputProps={{ min: 1, max: 7 }}
+                  value={formData.goals.workoutDays}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    goals: { ...formData.goals, workoutDays: parseInt(e.target.value) }
+                  })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Workout Duration (minutes)"
+                  type="number"
+                  value={formData.goals.workoutDuration}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    goals: { ...formData.goals, workoutDuration: parseInt(e.target.value) }
+                  })}
+                />
+              </Grid>
+            </Grid>
+          </CardContent>
+        </Card>
+
+        {/* Preferences */}
+        <Card sx={{ mb: 4, bgcolor: 'background.paper' }}>
+          <CardContent>
+            <Typography variant="h6" sx={{ mb: 3 }}>Preferences</Typography>
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <FormControl fullWidth>
+                  <InputLabel>Measurement System</InputLabel>
+                  <Select
+                    value={formData.preferences.measurementSystem}
+                    label="Measurement System"
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      preferences: { ...formData.preferences, measurementSystem: e.target.value }
+                    })}
+                  >
+                    <MenuItem value="metric">Metric (kg, cm)</MenuItem>
+                    <MenuItem value="imperial">Imperial (lbs, inches)</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <FormControl fullWidth>
+                  <InputLabel>Workout Reminders</InputLabel>
+                  <Select
+                    value={formData.preferences.workoutReminders}
+                    label="Workout Reminders"
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      preferences: { ...formData.preferences, workoutReminders: e.target.value }
+                    })}
+                  >
+                    <MenuItem value={true}>Enabled</MenuItem>
+                    <MenuItem value={false}>Disabled</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <FormControl fullWidth>
+                  <InputLabel>Meal Reminders</InputLabel>
+                  <Select
+                    value={formData.preferences.mealReminders}
+                    label="Meal Reminders"
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      preferences: { ...formData.preferences, mealReminders: e.target.value }
+                    })}
+                  >
+                    <MenuItem value={true}>Enabled</MenuItem>
+                    <MenuItem value={false}>Disabled</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <FormControl fullWidth>
+                  <InputLabel>Water Reminders</InputLabel>
+                  <Select
+                    value={formData.preferences.waterReminders}
+                    label="Water Reminders"
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      preferences: { ...formData.preferences, waterReminders: e.target.value }
+                    })}
+                  >
+                    <MenuItem value={true}>Enabled</MenuItem>
+                    <MenuItem value={false}>Disabled</MenuItem>
+                  </Select>
+                </FormControl>
               </Grid>
             </Grid>
           </CardContent>

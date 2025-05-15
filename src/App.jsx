@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import TestConnection from './components/TestConnection';
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -6,7 +7,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import Layout from './components/layout/Layout';
 import AuthWrapper from './components/auth/AuthWrapper';
 import Login from './components/auth/Login';
-import SignUp from './components/auth/SignUp';
+import Signup from './components/auth/Signup';
 import ProfileSetup from './components/profile/ProfileSetup';
 import Profile from './components/profile/Profile';
 import Dashboard from './components/dashboard/Dashboard';
@@ -50,20 +51,16 @@ const theme = createTheme({
 });
 
 const PublicRoute = ({ children }) => {
+  console.log('PublicRoute rendering');
   const isAuthenticated = useStore((state) => state.isAuthenticated);
-  const user = useStore((state) => state.user);
-  const location = useLocation();
+  console.log('PublicRoute - isAuthenticated:', isAuthenticated);
 
   if (isAuthenticated) {
-    // If user is authenticated but hasn't completed profile setup
-    if (!user?.name) {
-      return <Navigate to="/profile-setup" replace />;
-    }
-    // If user has completed profile setup, redirect to the intended page or dashboard
-    const intendedPath = location.state?.from?.pathname || '/dashboard';
-    return <Navigate to={intendedPath} replace />;
+    console.log('PublicRoute - redirecting to dashboard');
+    return <Navigate to="/dashboard" replace />;
   }
 
+  console.log('PublicRoute - rendering children');
   return children;
 };
 
@@ -103,6 +100,9 @@ export default function App() {
             theme="dark"
           />
           <Routes>
+            {/* Test Connection Route */}
+            <Route path="/test" element={<TestConnection />} />
+
             {/* Public Routes */}
             <Route
               path="/"
@@ -124,7 +124,7 @@ export default function App() {
               path="/signup"
               element={
                 <PublicRoute>
-                  <SignUp />
+                  <Signup />
                 </PublicRoute>
               }
             />

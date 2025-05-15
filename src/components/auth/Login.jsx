@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import {
   Box,
   Card,
@@ -10,43 +10,41 @@ import {
   InputAdornment,
   IconButton,
   Link,
+  CircularProgress,
 } from '@mui/material';
 import { Visibility, VisibilityOff, FitnessCenter } from '@mui/icons-material';
-import { Link as RouterLink } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import useStore from '../../store/useStore';
+import useAuthStore from '../../store/authStore';
 
 export default function Login() {
   const navigate = useNavigate();
-  const setUser = useStore((state) => state.setUser);
-  const setIsAuthenticated = useStore((state) => state.setIsAuthenticated);
+  const { login, isLoading, error, clearError } = useAuthStore();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   });
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleSubmit = (e) => {
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+      clearError();
+    }
+  }, [error, clearError]);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!formData.email || !formData.password) {
       toast.error('Please fill in all fields');
       return;
     }
-    
-    const user = {
-      email: formData.email,
-      name: 'User',
-      preferences: {
-        calorieGoal: 2000,
-        workoutDays: ['Monday', 'Wednesday', 'Friday'],
-      }
-    };
-    
-    setUser(user);
-    setIsAuthenticated(true);
-    toast.success('Login successful!');
-    navigate('/dashboard', { replace: true });
+
+    const success = await login(formData.email, formData.password);
+    if (success) {
+      toast.success('Login successful!');
+      navigate('/dashboard', { replace: true });
+    }
   };
 
   return (
@@ -175,6 +173,7 @@ export default function Login() {
               fullWidth
               type="submit"
               variant="contained"
+              disabled={isLoading}
               sx={{
                 py: 1.5,
                 background: 'linear-gradient(45deg, #FF4B2B, #FF416C)',
@@ -186,7 +185,11 @@ export default function Login() {
                 boxShadow: '0 4px 20px rgba(255, 75, 43, 0.25)',
               }}
             >
-              Login
+              {isLoading ? (
+                <CircularProgress size={24} color="inherit" />
+              ) : (
+                'Login'
+              )}
             </Button>
           </form>
 
